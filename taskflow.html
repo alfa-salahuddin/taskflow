@@ -399,8 +399,35 @@ async function loadAll(){
   try{
     const[p,t,s,u,td]=await Promise.all([sb('projects?order=created_at.asc'),sb('tasks?order=created_at.asc'),sb('subtasks?order=created_at.asc'),sb('task_updates?order=created_at.desc'),sb('today_tasks?order=created_at.asc')]);
     projects=p||[];tasks=t||[];subtasks=s||[];updates=u||[];todayItems=td||[];
+    await autoAddDueToday();
     navCounts();renderPage();
   }catch(e){toast('Failed to load','error');}
+}
+
+async function autoAddDueToday(){
+  const dueTasks=tasks.filter(t=>
+    t.due_date===todayStr&&
+    t.status!=='done'&&
+    !todayItems.some(x=>x.ref_id===t.id&&x.ref_type==='task')
+  );
+  const dueSubs=subtasks.filter(s=>
+    s.due_date===todayStr&&
+    s.status!=='done'&&
+    !s.done&&
+    !todayItems.some(x=>x.ref_id===s.id&&x.ref_type==='subtask')
+  );
+  const toAdd=[
+    ...dueTasks.map(t=>({type:'task',id:t.id})),
+    ...dueSubs.map(s=>({type:'subtask',id:s.id}))
+  ];
+  if(!toAdd.length)return;
+  for(const item of toAdd){
+    try{
+      const res=await sb('today_tasks','POST',{ref_type:item.type,ref_id:item.id,added_date:todayStr});
+      todayItems.push(res[0]);
+    }catch(e){}
+  }
+  if(toAdd.length)toast(`${toAdd.length} due-today task${toAdd.length!==1?'s':''} added automatically`);
 }
 
 function navCounts(){
@@ -874,4 +901,3 @@ init();
 </script>
 </body>
 </html>
-
